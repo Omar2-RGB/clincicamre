@@ -1,0 +1,153 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// حالات المريض لإدارة سير العمل
+enum PatientStatus {
+  ACTIVE
+  COMPLETED
+  ARCHIVED
+}
+
+model Patient {
+  id              String         @id @default(uuid())
+  fullName        String
+  phone           String
+  email           String?        // إضافة البريد الإلكتروني للتواصل
+  address         String?
+  age             Int?
+  medicalHistory  String?
+  medications     String?
+  allergies       String?
+  notes           String?
+  status          PatientStatus  @default(ACTIVE)
+  
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  
+  cases           Case[]
+  appointments    Appointment[]
+}
+
+// جدول الحالات العلاجية (تم فصله عن المريض للسماح بأكثر من حالة للمريض الواحد)
+model Case {
+  id                String         @id @default(uuid())
+  patientId         String
+  chiefComplaint    String?
+  extractionNeeded  Boolean        @default(false)
+  treatmentPlan     String?
+  plannedDuration   String?
+  totalCost         Float          @default(0) // التكلفة الكلية للخطة العلاجية
+  status            String         @default("جاري") // جاري، مكتمل، متوقف
+  previousTreatments String?
+
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  patient           Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  payments          Payment[]
+  dentalRecords     DentalRecord[] // السجلات الطبية (صور، أشعة، ملاحظات)
+  visits            Visit[]
+}
+
+// جدول الدفعات المالية
+model Payment {
+  id            String   @id @default(uuid())
+  caseId        String
+  amount        Float
+  paymentMethod String   @default("CASH") // طريقة الدفع
+  notes         String?
+  paymentDate   DateTime @default(now())
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  case          Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+}
+
+// جدول السجلات الطبية والصور (التكامل مع Supabase)
+model DentalRecord {
+  id        String   @id @default(uuid())
+  caseId    String
+  imageUrl  String   // الرابط القادم من Supabase
+  fileType  String   @default("X-RAY") // X-RAY, PHOTO, SCAN
+  phase     String?  // مرحلة العلاج
+  notes     String?
+  createdAt DateTime @default(now())
+
+  case      Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+}
+
+// جدول المراجعات الدورية والجلسات
+model Visit {
+  id            String   @id @default(uuid())
+  caseId        String
+  visitDate     DateTime
+  proceduresDone String?
+  nextVisitDate DateTime?
+  createdAt     DateTime @default(now())
+
+  case          Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+}
+
+// جدول المواعيد
+// 1. تحديث جدول المواعيد لدعم حجوزات الزوار الخارجية
+model Appointment {
+  id                  String   @id @default(uuid())
+  patientId           String?  // كود المريض (إذا كان مسجلاً داخل العيادة مسبقاً)
+  patientName         String?  // اسم المريض الزائر (للحجوزات الخارجية من صفحة المريض)
+  patientPhone        String?  // رقم هاتف المريض الزائر (للحجوزات الخارجية)
+  appointmentDatetime DateTime // تاريخ ووقت الموعد المشترك
+  duration            Int      @default(30) // مدة الموعد بالدقائق
+  status              String   @default("متاح") // متاح، محجوز، مكتمل، ملغي
+  type                String?  // نوع الموعد: استشارة، شد، مثبت...
+  notes               String?
+  createdAt           DateTime @default(now())
+
+  patient             Patient? @relation(fields: [patientId], references: [id], onDelete: SetNull)
+}
+
+// 2. تحديث بروفايل العيادة بالقيم الافتراضية الصحيحة لعيادة التقويم
+model ClinicProfile {
+  id           String   @id @default(uuid())
+  doctorName   String   @default("د. شعلان عبد العزيز")
+  currency     String   @default("SYP") // SYP لليرة السورية، USD للدولار
+  specialty    String   @default("أخصائي تقويم الأسنان والفكين")
+  bio          String?  
+  avatarUrl    String?  
+  mapLink      String?  
+  workingHours String?  // تخزن بصيغة JSON
+  gallery      String?  // روابط صور حالات التقويم قبل وبعد (مفصولة بفاصلة)
+  
+  updatedAt    DateTime @updatedAt
+}
+
+// 3. إضافة جدول التقييمات (جديد تماماً)
+model Review {
+  id        String   @id @default(uuid())
+  name      String
+  rating    Int
+  comment   String
+  createdAt DateTime @default(now())
+}
+
+// جدول المصاريف
+model Expense {
+  id          String   @id @default(uuid())
+  amount      Float
+  category    String?  // مواد سنية، إيجار، فواتير...
+  description String?
+  expenseDate DateTime @default(now())
+  createdAt   DateTime @default(now())
+}
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  createdAt DateTime @default(now())
+}
