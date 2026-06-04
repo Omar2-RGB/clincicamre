@@ -34,8 +34,7 @@ export default function LoginPage() {
     try {
       const result = await loginAction(formData);
       if (result.success) {
-        router.push("/(dashboard)"); // التوجيه للوحة التحكم بعد النجاح
-      } else {
+      router.push('/'); // يوجهه للوحة التحكم الرئيسية      } else {
         setError(result.message || "حدث خطأ أثناء تسجيل الدخول");
       }
     } catch (err) {
