@@ -16,20 +16,17 @@ export async function OPTIONS() {
 
 export async function GET(request: Request) {
   try {
-    // جلب التاريخ من الرابط إذا كان موجوداً
     const { searchParams } = new URL(request.url);
     const dateParam = searchParams.get('date');
 
-    // استخدام النوع الصحيح من Prisma بدلاً من any
     const whereClause: Prisma.AppointmentWhereInput = { status: 'متاح' };
 
-    // إذا أرسل تطبيق الفلتر تاريخاً معيناً، نجلب مواعيد هذا اليوم فقط
+    // إصلاح مشكلة التوقيت في البحث
     if (dateParam) {
-      const startOfDay = new Date(dateParam);
-      startOfDay.setHours(0, 0, 0, 0);
-
-      const endOfDay = new Date(dateParam);
-      endOfDay.setHours(23, 59, 59, 999);
+      // إجبار السيرفر على البحث بناءً على بداية ونهاية اليوم بتوقيت العيادة المحلي (UTC+3)
+      // بدلاً من توقيت غرينتش الذي يسبب ضياع المواعيد الصباحية
+      const startOfDay = new Date(`${dateParam}T00:00:00.000+03:00`);
+      const endOfDay = new Date(`${dateParam}T23:59:59.999+03:00`);
 
       whereClause.appointmentDatetime = {
         gte: startOfDay,
@@ -37,7 +34,6 @@ export async function GET(request: Request) {
       };
     }
 
-    // جلب البيانات من القاعدة
     const availableAppointments = await prisma.appointment.findMany({
       where: whereClause,
       orderBy: { appointmentDatetime: 'asc' },
@@ -49,9 +45,32 @@ export async function GET(request: Request) {
       } 
     });
 
-    // إرجاع البيانات مع الـ Headers المطلوبة للمتصفح
+    // 🌟 الحل السحري: تجهيز الوقت كنص ثابت لا يتغير 🌟
+    const formattedData = availableAppointments.map(app => {
+      const dateObj = new Date(app.appointmentDatetime);
+      
+      return {
+        id: app.id,
+        // نُبقي التاريخ الأصلي في حال احتاجه الفلاتر
+        appointmentDatetime: app.appointmentDatetime, 
+        duration: app.duration,
+        status: app.status,
+        
+        // المتغيرات الجديدة التي سيقرأها تطبيق المريض مباشرة
+        formattedTime: dateObj.toLocaleTimeString('ar-SY', {
+          timeZone: 'Asia/Damascus', // تثبيت التوقيت
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true // صيغة 12 ساعة (ص/م)
+        }),
+        formattedDate: dateObj.toLocaleDateString('en-CA', {
+          timeZone: 'Asia/Damascus'
+        })
+      };
+    });
+
     return NextResponse.json(
-      { success: true, data: availableAppointments }, 
+      { success: true, data: formattedData }, 
       { status: 200, headers: corsHeaders }
     );
   } catch (error) {

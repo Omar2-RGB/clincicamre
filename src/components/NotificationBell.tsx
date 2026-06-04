@@ -20,7 +20,9 @@ export default function NotificationBell() {
   const [showToast, setShowToast] = useState(false);
   const [latestPatient, setLatestPatient] = useState("");
   
-  const router = useRouter(); // 👈 تفعيل الراوتر
+  // 👈 مرجع للتحكم بالصوت
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const router = useRouter();
   const prevCountRef = useRef(0);
 
   const fetchNotifications = useCallback(async () => {
@@ -39,8 +41,13 @@ export default function NotificationBell() {
           setShowToast(true);
           
           try {
-            const audio = new Audio('/notify.mp3');
-            audio.play();
+            // 👈 إيقاف الصوت القديم إن وجد وتشغيل الجديد
+            if (audioRef.current) {
+              audioRef.current.pause();
+              audioRef.current.currentTime = 0;
+            }
+            audioRef.current = new Audio('/notify.mp3');
+            audioRef.current.play();
           } catch {}
 
           setTimeout(() => setShowToast(false), 5000);
@@ -60,8 +67,17 @@ export default function NotificationBell() {
     return () => clearInterval(interval);
   }, [fetchNotifications]);
 
+  // 👈 دالة جديدة لإيقاف الصوت
+  const stopAudio = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+  };
+
   // 👈 دالة للتعامل مع الضغط على الإشعار
   const handleNotificationClick = () => {
+    stopAudio(); // 👈 إيقاف الصوت فوراً
     setIsOpen(false); // إغلاق القائمة
     setUnreadCount(0); // تصفير العداد (لأنه تمت رؤية الإشعارات)
     router.push('/appointments'); // توجيه الطبيب لصفحة المواعيد
@@ -90,7 +106,6 @@ export default function NotificationBell() {
             <div className="max-h-[300px] overflow-y-auto">
               {notifications.length > 0 ? (
                 notifications.map((notif, idx) => (
-                  // 👈 إضافة onClick هنا للتوجيه عند الضغط
                   <div 
                     key={notif.id || idx} 
                     onClick={handleNotificationClick}
@@ -100,7 +115,6 @@ export default function NotificationBell() {
                       <CalendarCheck className="w-4 h-4" />
                     </div>
                     <div>
-                      {/* 👈 عرض اسم المريض الحقيقي وتفاصيله */}
                       <p className="text-sm text-white font-medium mb-1">موعد: {notif.patientName}</p>
                       <p className="text-xs text-slate-400 flex items-center gap-1">
                         <Clock className="w-3 h-3" /> {notif.date} الساعة {notif.time}
@@ -126,10 +140,16 @@ export default function NotificationBell() {
           </div>
           <div className="flex-1">
             <h4 className="font-bold text-sm">حجز موعد جديد!</h4>
-            {/* 👈 عرض اسم المريض في النافذة المنبثقة */}
             <p className="text-xs text-blue-100 mt-0.5">تم حجز موعد للمريض: {latestPatient}</p>
           </div>
-          <button onClick={(e) => { e.stopPropagation(); setShowToast(false); }} className="hover:bg-white/20 p-1 rounded-lg transition-colors">
+          <button 
+            onClick={(e) => { 
+              e.stopPropagation(); 
+              setShowToast(false); 
+              stopAudio(); // 👈 إيقاف الصوت عند الضغط على زر الإغلاق
+            }} 
+            className="hover:bg-white/20 p-1 rounded-lg transition-colors"
+          >
             <X className="w-4 h-4 text-white" />
           </button>
         </div>
