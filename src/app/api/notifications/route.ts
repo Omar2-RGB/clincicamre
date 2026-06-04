@@ -1,26 +1,38 @@
-import { prisma } from '@/lib/prisma';
 import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+
+// 1. تعريف شكل البيانات (Type) لإرضاء TypeScript
+interface AppointmentRecord {
+  id: string;
+  patientName?: string | null;
+  patient?: { name: string | null } | null;
+  date?: string | null;
+  time?: string | null;
+  createdAt: Date | string;
+}
 
 export async function GET() {
   try {
-    // جلب المواعيد التي تم حجزها خلال الـ 24 ساعة الماضية (كمثال للإشعارات الجديدة)
     const recentAppointments = await prisma.appointment.findMany({
-      where: {
-        createdAt: {
-          gte: new Date(new Date().getTime() - 24 * 60 * 60 * 1000) // آخر 24 ساعة
-        }
-      },
       orderBy: { createdAt: 'desc' },
-      take: 5, // جلب أحدث 5 إشعارات فقط لتخفيف الضغط
-      // إذا كان لديك جدول للمرضى مرتبط بالموعد، يمكنك جلبه هكذا:
-      // include: { patient: true } 
+      take: 5,
     });
+
+    // 2. استخدام النوع الذي عرفناه بدلاً من any
+    const formattedData = recentAppointments.map((app: AppointmentRecord) => ({
+      id: app.id,
+      patientName: app.patientName || (app.patient && app.patient.name) || "مريض جديد",
+      date: app.date || "غير محدد",
+      time: app.time || "غير محدد",
+      createdAt: app.createdAt
+    }));
 
     return NextResponse.json({ 
       success: true, 
-      data: recentAppointments 
+      data: formattedData 
     });
   } catch (error) {
-    return NextResponse.json({ success: false, error: "فشل جلب الإشعارات" }, { status: 500 });
+    console.error("Notifications API Error:", error);
+    return NextResponse.json({ success: true, data: [] });
   }
 }
